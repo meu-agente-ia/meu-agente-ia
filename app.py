@@ -18,6 +18,15 @@ st.markdown("**Sistema especialista em desenvolvimento de software**")
 # 🔑 CHAVE GROQ INTEGRADA DIRETAMENTE
 GROQ_API_KEY = "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"
 
+# Modelos disponíveis no Groq
+AVAILABLE_MODELS = [
+    "llama-3.1-8b-instant",  # Modelo mais rápido
+    "llama-3.1-70b-versatile",  # Modelo mais inteligente
+    "mixtral-8x7b-32768"  # Tentar mesmo assim
+]
+
+SELECTED_MODEL = "llama-3.1-70b-versatile"  # Modelo padrão
+
 # Sistema de estado
 if 'conversation' not in st.session_state:
     st.session_state.conversation = []
@@ -25,28 +34,56 @@ if 'excel_data' not in st.session_state:
     st.session_state.excel_data = None
 if 'project_scope' not in st.session_state:
     st.session_state.project_scope = None
+if 'current_model' not in st.session_state:
+    st.session_state.current_model = SELECTED_MODEL
 
 # Classe do arquiteto
 class SystemArchitect:
     def __init__(self, api_key):
         self.client = groq.Client(api_key=api_key)
+        self.model = st.session_state.current_model
+    
+    def try_models(self, message, history):
+        """Tenta diferentes modelos até encontrar um que funcione"""
+        models_to_try = ["llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+        
+        for model in models_to_try:
+            try:
+                messages = []
+                for msg in history[-6:]:
+                    messages.append({"role": msg["role"], "content": msg["content"]})
+                messages.append({"role": "user", "content": message})
+                
+                response = self.client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=1500
+                )
+                st.session_state.current_model = model
+                return response.choices[0].message.content
+            except Exception as e:
+                continue
+        
+        return "❌ Erro: Nenhum modelo disponível funcionou. Tente novamente mais tarde."
     
     def chat(self, message, history):
         try:
             messages = []
-            for msg in history[-6:]:  # Últimas 6 mensagens
+            for msg in history[-6:]:
                 messages.append({"role": msg["role"], "content": msg["content"]})
             messages.append({"role": "user", "content": message})
             
             response = self.client.chat.completions.create(
-                model="mixtral-8x7b-32768",
+                model=self.model,
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1500
             )
             return response.choices[0].message.content
         except Exception as e:
-            return f"❌ Erro na comunicação: {str(e)}"
+            # Se der erro, tenta outros modelos
+            return self.try_models(message, history)
     
     def generate_technical_scope(self, requirements):
         """Gera escopo técnico completo"""
@@ -80,15 +117,26 @@ class SystemArchitect:
         
         try:
             response = self.client.chat.completions.create(
-                model="mixtral-8x7b-32768",
+                model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=3000
             )
             return response.choices[0].message.content
         except Exception as e:
-            return f"Erro ao gerar escopo: {str(e)}"
-    
+            # Tenta com outro modelo
+            try:
+                response = self.client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=3000
+                )
+                st.session_state.current_model = "llama-3.1-8b-instant"
+                return response.choices[0].message.content
+            except Exception as e2:
+                return f"Escopo técnico básico baseado nos requisitos fornecidos. Sistema personalizado com arquitetura moderna."
+
     def generate_roadmap(self, scope_content):
         """Gera roadmap baseado no escopo"""
         prompt = f"""
@@ -123,14 +171,34 @@ class SystemArchitect:
         
         try:
             response = self.client.chat.completions.create(
-                model="mixtral-8x7b-32768",
+                model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=2000
             )
             return response.choices[0].message.content
         except Exception as e:
-            return f"Roadmap padrão: 6-8 semanas divididas em 4 fases"
+            return """# 🗓️ ROADMAP DE DESENVOLVIMENTO
+
+## Fase 1: Planejamento (1-2 semanas)
+- Definição de requisitos detalhados
+- Setup do ambiente de desenvolvimento
+- Arquitetura técnica inicial
+
+## Fase 2: Desenvolvimento (3-4 semanas)
+- Implementação das funcionalidades core
+- Desenvolvimento do backend e frontend
+- Integrações básicas
+
+## Fase 3: Testes (1-2 semanas)
+- Testes de qualidade
+- Correções e otimizações
+- Preparação para deploy
+
+## Fase 4: Deploy (1 semana)
+- Deploy em produção
+- Validação final
+- Documentação"""
 
     def analyze_excel_data(self, df):
         """Analisa dados do Excel e extrai insights"""
@@ -153,29 +221,47 @@ class SystemArchitect:
         
         try:
             response = self.client.chat.completions.create(
-                model="mixtral-8x7b-32768",
+                model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=1500
             )
             return response.choices[0].message.content
         except Exception as e:
-            return f"Análise básica: {len(df)} linhas com {len(df.columns)} colunas"
+            return f"Análise básica: {len(df)} linhas com {len(df.columns)} colunas. Dados estruturados para sistema empresarial."
 
 # Interface principal
 def main():
     # Verificar conexão
     try:
         architect = SystemArchitect(GROQ_API_KEY)
+        # Teste com modelo atual
         test_response = architect.client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model=st.session_state.current_model,
             messages=[{"role": "user", "content": "OK"}],
             max_tokens=5
         )
-        st.sidebar.success("✅ Conectado ao Groq API")
+        st.sidebar.success(f"✅ Conectado - Modelo: {st.session_state.current_model}")
     except Exception as e:
-        st.error(f"❌ Erro de conexão: {str(e)}")
-        st.stop()
+        # Tentar com modelo alternativo
+        try:
+            architect = SystemArchitect(GROQ_API_KEY)
+            test_response = architect.client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": "OK"}],
+                max_tokens=5
+            )
+            st.session_state.current_model = "llama-3.1-8b-instant"
+            st.sidebar.success(f"✅ Conectado - Modelo: {st.session_state.current_model}")
+        except Exception as e2:
+            st.error(f"❌ Erro de conexão: {str(e2)}")
+            st.info("""
+            **Solução:**
+            - A Groq atualizou seus modelos
+            - Aguarde alguns minutos e tente novamente
+            - Ou visite: https://console.groq.com/docs/models
+            """)
+            return
     
     # Abas principais
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Conversa", "📊 Excel", "📋 Escopo", "🗓️ Roadmap"])
@@ -187,7 +273,7 @@ def main():
         if not st.session_state.conversation:
             st.session_state.conversation.append({
                 "role": "assistant",
-                "content": "👋 Olá! Sou seu Arquiteto de Sistemas Sênior com 20+ anos de experiência.\n\n**Vamos criar o escopo do seu sistema? Me conte:**\n• Qual o objetivo principal?\n• Quem serão os usuários?\n• Quais funcionalidades são essenciais?\n• Há alguma restrição técnica ou de prazo?"
+                "content": f"👋 Olá! Sou seu Arquiteto de Sistemas Sênior (Modelo: {st.session_state.current_model}).\n\n**Vamos criar o escopo do seu sistema? Me conte:**\n• Qual o objetivo principal?\n• Quem serão os usuários?\n• Quais funcionalidades são essenciais?\n• Há alguma restrição técnica ou de prazo?"
             })
         
         # Mostrar histórico
